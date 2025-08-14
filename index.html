@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>QR Code Generator</title>
-  <meta name="description" content="Enter any URL or text to instantly generate a QR code in your browser. No server required." />
   <style>
     html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background: #f9fafb; color: #111827; }
     .wrap { min-height: 100%; display: grid; place-items: center; padding: 24px; }
@@ -13,7 +12,7 @@
     p.sub { margin: 0 0 20px; color: #4b5563; }
     input[type="text"] { width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 12px; font-size: 1rem; }
     .qr-wrap { display: grid; place-items: center; padding: 18px; border: 1px dashed #e5e7eb; border-radius: 16px; margin-top: 20px; }
-    #qrcode { width: 100%; display: grid; place-items: center; min-height: 520px; }
+    #qrcode { display: grid; place-items: center; width: 100%; }
     .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
     button { cursor: pointer; padding: 12px 16px; border-radius: 12px; border: 1px solid #111827; background: #111827; color: white; font-weight: 600; }
     button.secondary { background: white; color: #111827; border-color: #d1d5db; }
@@ -44,7 +43,6 @@
   <script>
     (function(){
       const $ = (sel) => document.querySelector(sel);
-      const params = new URLSearchParams(location.search);
       const inputEl = $('#input');
       const dlBtn = $('#download');
       const copyBtn = $('#copyurl');
@@ -57,7 +55,6 @@
       function normalizeInput(raw){
         let v = (raw || '').trim();
         if (!v) return '';
-        // If it looks like a bare domain/path, assume https + maybe www.
         const looksLikeUrl = /^[^\s]+\.[^\s]+/.test(v) || /^localhost(:\d+)?(\/|$)/i.test(v);
         const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(v);
         if (looksLikeUrl && !hasScheme){
@@ -73,7 +70,7 @@
       function makeQR(){
         const holder = $('#qrcode');
         if (typeof QRCode === 'undefined'){
-          holder.innerHTML = '<div style="color:#b91c1c; font-size:14px;">QR library failed to load. Ensure <code>qrcode.min.js</code> is in the same folder and the &lt;script src=\"./qrcode.min.js\"&gt; tag is present.</div>';
+          holder.innerHTML = '<div style="color:#b91c1c; font-size:14px;">QR library failed to load.</div>';
           return;
         }
         const text = normalizeInput(inputEl.value);
@@ -81,10 +78,13 @@
         if (text === lastText) return;
         lastText = text;
         clearQR();
+
+        // Determine size based on viewport width (mobile friendly)
+        const size = Math.min(window.innerWidth * 0.8, 512);
         new QRCode(holder, {
           text,
-          width: 512,
-          height: 512,
+          width: size,
+          height: size,
           colorDark: '#000000',
           colorLight: '#ffffff',
           correctLevel: QRCode.CorrectLevel.M
@@ -92,16 +92,9 @@
         holder.style.padding = '8px';
       }
 
-      // Prefill from ?u= and render immediately
-      if (params.has('u')) {
-        inputEl.value = params.get('u');
-      }
-      // Generate on input/paste/blur just to be safe
       ['input','change','paste','blur','keyup'].forEach(ev => inputEl.addEventListener(ev, () => { lastText = ''; makeQR(); }));
-      // First paint
       makeQR();
 
-      // Download PNG (works for canvas or img output)
       dlBtn.addEventListener('click', () => {
         const canv = document.querySelector('#qrcode canvas');
         const img = document.querySelector('#qrcode img');
@@ -114,7 +107,6 @@
         link.click();
       });
 
-      // Copy input text (normalized)
       copyBtn.addEventListener('click', async () => {
         const v = normalizeInput(inputEl.value);
         if (!v) return alert('Nothing to copy.');
@@ -123,13 +115,13 @@
         setTimeout(() => copyBtn.textContent = 'Copy input text', 1200);
       });
 
-      // Share & permalink include normalized input
       function permalink(){
         const url = new URL(location.href);
         const v = normalizeInput(inputEl.value);
         url.search = v ? ('?u=' + encodeURIComponent(v)) : '';
         return url.toString();
       }
+
       shareBtn.addEventListener('click', async () => {
         try {
           const url = permalink();
@@ -141,11 +133,15 @@
           }
         } catch { alert('Unable to share.'); }
       });
+
       linkBtn.addEventListener('click', async () => {
         await navigator.clipboard.writeText(permalink());
         linkBtn.textContent = 'Permalink copied!';
         setTimeout(() => linkBtn.textContent = 'Copy page permalink', 1200);
       });
+
+      // Update size on window resize
+      window.addEventListener('resize', () => { lastText = ''; makeQR(); });
     })();
   </script>
 </body>
