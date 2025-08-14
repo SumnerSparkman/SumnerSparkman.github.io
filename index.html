@@ -59,6 +59,7 @@
 
       <div class="actions">
         <button id="download" class="secondary" type="button">Download PNG</button>
+        <button id="copyimg" class="secondary" type="button">Copy PNG</button>
         <button id="copyurl" class="secondary" type="button">Copy input text</button>
         <button id="share" class="secondary" type="button">Share</button>
         <button id="permalink" class="secondary" type="button">Copy page permalink</button>
@@ -67,7 +68,7 @@
   </main>
 
   <script>
-    (function(){
+    (function () {
       const $ = (sel) => document.querySelector(sel);
 
       const inputEl = $('#input');
@@ -77,6 +78,7 @@
       const roundedOut = $('#roundedOut');
 
       const dlBtn = $('#download');
+      const copyImgBtn = $('#copyimg');
       const copyBtn = $('#copyurl');
       const shareBtn = $('#share');
       const linkBtn = $('#permalink');
@@ -86,7 +88,7 @@
       let lastRounded = -1;
 
       // Load from query string: ?u=...&cd=#hex&cl=#hex&rs=0..50
-      (function readParams(){
+      (function readParams() {
         const params = new URL(location.href).searchParams;
         const qUrl = params.get('u');
         const qCd = params.get('cd');
@@ -103,14 +105,14 @@
         roundedOut.textContent = roundedEl.value + '%';
       })();
 
-      function clearQR(){ $('#qrcode').innerHTML = ''; }
+      function clearQR() { $('#qrcode').innerHTML = ''; }
 
-      function normalizeInput(raw){
+      function normalizeInput(raw) {
         let v = (raw || '').trim();
         if (!v) return '';
         const looksLikeUrl = /^[^\s]+\.[^\s]+/.test(v) || /^localhost(:\d+)?(\/|$)/i.test(v);
         const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(v);
-        if (looksLikeUrl && !hasScheme){
+        if (looksLikeUrl && !hasScheme) {
           const parts = v.split('/');
           const host = parts[0];
           const hasSub = host.split('.').length > 2 || host.toLowerCase().startsWith('www.');
@@ -119,117 +121,116 @@
         }
         return v;
       }
-	  function makeQR(){
-		  const holder = $('#qrcode');
-		  if (typeof QRCode === 'undefined'){
-			holder.innerHTML = '<div style="color:#b91c1c; font-size:14px;">QR library failed to load.</div>';
-			return;
-		  }
 
-		  const text = normalizeInput(inputEl.value);
-		  const colorDark = colorDarkEl.value || '#000000';
-		  const colorLight = colorLightEl.value || '#ffffff';
-		  const roundedPct = Math.max(0, Math.min(50, parseInt(roundedEl.value || '25', 10)));
+      function makeQR() {
+        const holder = $('#qrcode');
+        if (typeof QRCode === 'undefined') {
+          holder.innerHTML = '<div style="color:#b91c1c; font-size:14px;">QR library failed to load.</div>';
+          return;
+        }
 
-		  if (!text) { holder.innerHTML = ''; lastText=''; lastColors={dark:'', light:''}; lastRounded=-1; return; }
-		  if (text === lastText && colorDark === lastColors.dark &&
-			  colorLight === lastColors.light && roundedPct === lastRounded) return;
+        const text = normalizeInput(inputEl.value);
+        const colorDark = colorDarkEl.value || '#000000';
+        const colorLight = colorLightEl.value || '#ffffff';
+        const roundedPct = Math.max(0, Math.min(50, parseInt(roundedEl.value || '25', 10)));
 
-		  lastText = text; lastColors = { dark: colorDark, light: colorLight }; lastRounded = roundedPct;
-		  holder.innerHTML = '';
+        if (!text) { holder.innerHTML = ''; lastText = ''; lastColors = { dark: '', light: '' }; lastRounded = -1; return; }
+        if (text === lastText && colorDark === lastColors.dark && colorLight === lastColors.light && roundedPct === lastRounded) return;
 
-		  // Encode only
-		  const qr = new QRCode(document.createElement('div'), {
-			text, width: 256, height: 256, colorDark, colorLight, correctLevel: QRCode.CorrectLevel.M
-		  })._oQRCode;
-		  const n = qr.getModuleCount();
+        lastText = text; lastColors = { dark: colorDark, light: colorLight }; lastRounded = roundedPct;
+        holder.innerHTML = '';
 
-		  // integer grid to avoid hairlines
-		  const maxSize = Math.min(window.innerWidth * 0.8, 512);
-		  const cell = Math.max(1, Math.floor(maxSize / n));
-		  const vbSize = cell * n;
-		  const r = cell * (roundedPct / 100);
+        // Encode only
+        const qr = new QRCode(document.createElement('div'), {
+          text, width: 256, height: 256, colorDark, colorLight, correctLevel: QRCode.CorrectLevel.M
+        })._oQRCode;
+        const n = qr.getModuleCount();
 
-		  const NS = "http://www.w3.org/2000/svg";
-		  const svg = document.createElementNS(NS, 'svg');
-		  svg.setAttribute('viewBox', `0 0 ${vbSize} ${vbSize}`);
-		  svg.setAttribute('width', '100%');
-		  svg.setAttribute('height', '100%');
-		  svg.setAttribute('shape-rendering', 'geometricPrecision');
+        // integer grid to avoid hairlines
+        const maxSize = Math.min(window.innerWidth * 0.8, 512);
+        const cell = Math.max(1, Math.floor(maxSize / n));
+        const vbSize = cell * n;
+        const r = cell * (roundedPct / 100);
 
-		  const bg = document.createElementNS(NS, 'rect');
-		  bg.setAttribute('x', '0'); bg.setAttribute('y', '0');
-		  bg.setAttribute('width', vbSize); bg.setAttribute('height', vbSize);
-		  bg.setAttribute('fill', colorLight);
-		  svg.appendChild(bg);
+        const NS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('viewBox', `0 0 ${vbSize} ${vbSize}`);
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
+        svg.setAttribute('shape-rendering', 'geometricPrecision');
 
-		  const isDark = (rr, cc) => (rr >= 0 && cc >= 0 && rr < n && cc < n) ? qr.isDark(rr, cc) : false;
+        const bg = document.createElementNS(NS, 'rect');
+        bg.setAttribute('x', '0'); bg.setAttribute('y', '0');
+        bg.setAttribute('width', vbSize); bg.setAttribute('height', vbSize);
+        bg.setAttribute('fill', colorLight);
+        svg.appendChild(bg);
 
-		  function roundedRectPath(x, y, w, h, rtl, rtr, rbr, rbl){
-			rtl = Math.min(rtl, w/2, h/2);
-			rtr = Math.min(rtr, w/2, h/2);
-			rbr = Math.min(rbr, w/2, h/2);
-			rbl = Math.min(rbl, w/2, h/2);
-			return [
-			  `M${x+rtl},${y}`,
-			  `H${x+w-rtr}`, rtr?`Q${x+w},${y} ${x+w},${y+rtr}`:`V${y}`,
-			  `V${y+h-rbr}`, rbr?`Q${x+w},${y+h} ${x+w-rbr},${y+h}`:`H${x+w}`,
-			  `H${x+rbl}`,   rbl?`Q${x},${y+h} ${x},${y+h-rbl}`:`V${y+h}`,
-			  `V${y+rtl}`,   rtl?`Q${x},${y} ${x+rtl},${y}`:`H${x}`,
-			  'Z'
-			].join(' ');
-		  }
+        const isDark = (rr, cc) => (rr >= 0 && cc >= 0 && rr < n && cc < n) ? qr.isDark(rr, cc) : false;
 
-		  let d = '';      // dark union
-		  let holes = '';  // concave cutouts (added with evenodd)
+        function roundedRectPath(x, y, w, h, rtl, rtr, rbr, rbl) {
+          rtl = Math.min(rtl, w / 2, h / 2);
+          rtr = Math.min(rtr, w / 2, h / 2);
+          rbr = Math.min(rbr, w / 2, h / 2);
+          rbl = Math.min(rbl, w / 2, h / 2);
+          return [
+            `M${x + rtl},${y}`,
+            `H${x + w - rtr}`, rtr ? `Q${x + w},${y} ${x + w},${y + rtr}` : `V${y}`,
+            `V${y + h - rbr}`, rbr ? `Q${x + w},${y + h} ${x + w - rbr},${y + h}` : `H${x + w}`,
+            `H${x + rbl}`, rbl ? `Q${x},${y + h} ${x},${y + h - rbl}` : `V${y + h}`,
+            `V${y + rtl}`, rtl ? `Q${x},${y} ${x + rtl},${y}` : `H${x}`,
+            'Z'
+          ].join(' ');
+        }
 
-		  for (let row = 0; row < n; row++) {
-			for (let col = 0; col < n; col++) {
-			  const x = col * cell, y = row * cell;
+        let d = '';      // dark union
+        let holes = '';  // concave cutouts (added with evenodd)
 
-			  if (qr.isDark(row, col)) {
-				const up = isDark(row-1, col), down = isDark(row+1, col);
-				const left = isDark(row, col-1), right = isDark(row, col+1);
+        for (let row = 0; row < n; row++) {
+          for (let col = 0; col < n; col++) {
+            const x = col * cell, y = row * cell;
 
-				// NEW: require diagonal to be light for convex rounding
-				const tlDiag = isDark(row-1, col-1);
-				const trDiag = isDark(row-1, col+1);
-				const brDiag = isDark(row+1, col+1);
-				const blDiag = isDark(row+1, col-1);
+            if (qr.isDark(row, col)) {
+              const up = isDark(row - 1, col), down = isDark(row + 1, col);
+              const left = isDark(row, col - 1), right = isDark(row, col + 1);
 
-				const rtl = (!up && !left && !tlDiag) ? r : 0;
-				const rtr = (!up && !right && !trDiag) ? r : 0;
-				const rbr = (!down && !right && !brDiag) ? r : 0;
-				const rbl = (!down && !left && !blDiag) ? r : 0;
+              // require diagonal to be light for convex rounding
+              const tlDiag = isDark(row - 1, col - 1);
+              const trDiag = isDark(row - 1, col + 1);
+              const brDiag = isDark(row + 1, col + 1);
+              const blDiag = isDark(row + 1, col - 1);
 
-				d += roundedRectPath(x, y, cell, cell, rtl, rtr, rbr, rbl) + ' ';
-			  } else if (r > 0) {
-				// inner (concave) corners: carve holes only where two orthogonal neighbors are dark
-				const up = isDark(row-1, col), down = isDark(row+1, col);
-				const left = isDark(row, col-1), right = isDark(row, col+1);
-				const xr = x + cell, yb = y + cell;
+              const rtl = (!up && !left && !tlDiag) ? r : 0;
+              const rtr = (!up && !right && !trDiag) ? r : 0;
+              const rbr = (!down && !right && !brDiag) ? r : 0;
+              const rbl = (!down && !left && !blDiag) ? r : 0;
 
-				if (up && left)   holes += `M${x},${y} L${x},${y+r} A${r},${r} 0 0 1 ${x+r},${y} Z `;
-				if (up && right)  holes += `M${xr},${y} L${xr-r},${y} A${r},${r} 0 0 1 ${xr},${y+r} Z `;
-				if (down && right)holes += `M${xr},${yb} L${xr},${yb-r} A${r},${r} 0 0 1 ${xr-r},${yb} Z `;
-				if (down && left) holes += `M${x},${yb} L${x+r},${yb} A${r},${r} 0 0 1 ${x},${yb-r} Z `;
-			  }
-			}
-		  }
+              d += roundedRectPath(x, y, cell, cell, rtl, rtr, rbr, rbl) + ' ';
+            } else if (r > 0) {
+              // inner (concave) corners: carve holes only where two orthogonal neighbors are dark
+              const up = isDark(row - 1, col), down = isDark(row + 1, col);
+              const left = isDark(row, col - 1), right = isDark(row, col + 1);
+              const xr = x + cell, yb = y + cell;
 
-		  const path = document.createElementNS(NS, 'path');
-		  path.setAttribute('d', (d + holes).trim());
-		  path.setAttribute('fill', colorDark);
-		  path.setAttribute('fill-rule', 'evenodd'); // subtract holes
-		  svg.appendChild(path);
+              if (up && left) holes += `M${x},${y} L${x},${y + r} A${r},${r} 0 0 1 ${x + r},${y} Z `;
+              if (up && right) holes += `M${xr},${y} L${xr - r},${y} A${r},${r} 0 0 1 ${xr},${y + r} Z `;
+              if (down && right) holes += `M${xr},${yb} L${xr},${yb - r} A${r},${r} 0 0 1 ${xr - r},${yb} Z `;
+              if (down && left) holes += `M${x},${yb} L${x + r},${yb} A${r},${r} 0 0 1 ${x},${yb - r} Z `;
+            }
+          }
+        }
 
-		  holder.appendChild(svg);
-		  holder.style.padding = '8px';
-		}
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', (d + holes).trim());
+        path.setAttribute('fill', colorDark);
+        path.setAttribute('fill-rule', 'evenodd'); // subtract holes
+        svg.appendChild(path);
 
-      
+        holder.appendChild(svg);
+        holder.style.padding = '8px';
+      }
+
       // Events
-      ['input','change','paste','blur','keyup'].forEach(ev =>
+      ['input', 'change', 'paste', 'blur', 'keyup'].forEach(ev =>
         inputEl.addEventListener(ev, () => { lastText = ''; makeQR(); })
       );
       [colorDarkEl, colorLightEl].forEach(el =>
@@ -248,7 +249,7 @@
         if (!svg) return alert('Generate a QR first.');
 
         const xml = new XMLSerializer().serializeToString(svg);
-        const svgBlob = new Blob([xml], {type: 'image/svg+xml;charset=utf-8'});
+        const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
         const url = URL.createObjectURL(svgBlob);
 
         const img = new Image();
@@ -272,15 +273,50 @@
         img.src = url;
       });
 
+      // Copy PNG to clipboard
+      copyImgBtn.addEventListener('click', async () => {
+        const svg = document.querySelector('#qrcode svg');
+        if (!svg) return alert('Generate a QR first.');
+
+        const xml = new XMLSerializer().serializeToString(svg);
+        const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+
+        const img = new Image();
+        img.onload = () => {
+          const px = Math.round(svg.viewBox.baseVal.width || 512);
+          const scale = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+          const canvas = document.createElement('canvas');
+          canvas.width = px * scale;
+          canvas.height = px * scale;
+          const ctx = canvas.getContext('2d');
+          ctx.scale(scale, scale);
+          ctx.drawImage(img, 0, 0, px, px);
+          URL.revokeObjectURL(url);
+
+          canvas.toBlob(async (blob) => {
+            try {
+              await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+              copyImgBtn.textContent = 'Copied!';
+              setTimeout(() => (copyImgBtn.textContent = 'Copy PNG'), 1200);
+            } catch (err) {
+              alert('Clipboard image copy failed: ' + err);
+            }
+          });
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); alert('Unable to render image.'); };
+        img.src = url;
+      });
+
       copyBtn.addEventListener('click', async () => {
         const v = normalizeInput(inputEl.value);
         if (!v) return alert('Nothing to copy.');
         await navigator.clipboard.writeText(v);
         copyBtn.textContent = 'Copied!';
-        setTimeout(() => copyBtn.textContent = 'Copy input text', 1200);
+        setTimeout(() => (copyBtn.textContent = 'Copy input text'), 1200);
       });
 
-      function permalink(){
+      function permalink() {
         const url = new URL(location.href);
         const v = normalizeInput(inputEl.value);
         const cd = colorDarkEl.value || '#000000';
@@ -310,7 +346,7 @@
       linkBtn.addEventListener('click', async () => {
         await navigator.clipboard.writeText(permalink());
         linkBtn.textContent = 'Permalink copied!';
-        setTimeout(() => linkBtn.textContent = 'Copy page permalink', 1200);
+        setTimeout(() => (linkBtn.textContent = 'Copy page permalink'), 1200);
       });
 
       window.addEventListener('resize', () => { lastText = ''; makeQR(); });
