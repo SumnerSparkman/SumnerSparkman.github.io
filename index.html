@@ -119,137 +119,112 @@
         }
         return v;
       }
-      function makeQR(){
-        const holder = document.querySelector('#qrcode');
-        if (typeof QRCode === 'undefined'){
-          holder.innerHTML = '<div style="color:#b91c1c; font-size:14px;">QR library failed to load.</div>';
-          return;
-        }
+	  function makeQR(){
+		  const holder = $('#qrcode');
+		  if (typeof QRCode === 'undefined'){
+			holder.innerHTML = '<div style="color:#b91c1c; font-size:14px;">QR library failed to load.</div>';
+			return;
+		  }
 
-        const text = normalizeInput(document.querySelector('#input').value);
-        const colorDark = document.querySelector('#colorDark').value || '#000000';
-        const colorLight = document.querySelector('#colorLight').value || '#ffffff';
-        const roundedPct = Math.max(0, Math.min(50, parseInt(document.querySelector('#rounded').value || '25', 10)));
+		  const text = normalizeInput(inputEl.value);
+		  const colorDark = colorDarkEl.value || '#000000';
+		  const colorLight = colorLightEl.value || '#ffffff';
+		  const roundedPct = Math.max(0, Math.min(50, parseInt(roundedEl.value || '25', 10)));
 
-        if (!text) { holder.innerHTML = ''; lastText=''; lastColors={dark:'', light:''}; lastRounded=-1; return; }
-        if (text === lastText && colorDark === lastColors.dark && colorLight === lastColors.light && roundedPct === lastRounded) return;
+		  if (!text) { holder.innerHTML = ''; lastText=''; lastColors={dark:'', light:''}; lastRounded=-1; return; }
+		  if (text === lastText && colorDark === lastColors.dark &&
+			  colorLight === lastColors.light && roundedPct === lastRounded) return;
 
-        lastText = text; lastColors = {dark: colorDark, light: colorLight}; lastRounded = roundedPct;
-        holder.innerHTML = '';
+		  lastText = text; lastColors = { dark: colorDark, light: colorLight }; lastRounded = roundedPct;
+		  holder.innerHTML = '';
 
-        // Encode only
-        const tmp = new QRCode(document.createElement('div'), {
-          text, width: 256, height: 256, colorDark, colorLight, correctLevel: QRCode.CorrectLevel.M
-        });
-        const qr = tmp._oQRCode;
-        const n = qr.getModuleCount();
+		  // Encode only
+		  const qr = new QRCode(document.createElement('div'), {
+			text, width: 256, height: 256, colorDark, colorLight, correctLevel: QRCode.CorrectLevel.M
+		  })._oQRCode;
+		  const n = qr.getModuleCount();
 
-        // Snap to integer grid to avoid hairlines
-        const maxSize = Math.min(window.innerWidth * 0.8, 512);
-        const cell = Math.max(1, Math.floor(maxSize / n));
-        const vbSize = cell * n;
-        const r = cell * (roundedPct / 100);
+		  // Snap to integer units (prevents hairlines)
+		  const maxSize = Math.min(window.innerWidth * 0.8, 512);
+		  const cell = Math.max(1, Math.floor(maxSize / n));
+		  const vbSize = cell * n;
+		  const r = cell * (roundedPct / 100);
 
-        const NS = "http://www.w3.org/2000/svg";
-        const svg = document.createElementNS(NS, 'svg');
-        svg.setAttribute('viewBox', `0 0 ${vbSize} ${vbSize}`);
-        svg.setAttribute('width', '100%');
-        svg.setAttribute('height', '100%');
-        svg.setAttribute('shape-rendering', 'geometricPrecision');
+		  // SVG
+		  const NS = "http://www.w3.org/2000/svg";
+		  const svg = document.createElementNS(NS, 'svg');
+		  svg.setAttribute('viewBox', `0 0 ${vbSize} ${vbSize}`);
+		  svg.setAttribute('width', '100%');
+		  svg.setAttribute('height', '100%');
+		  svg.setAttribute('shape-rendering', 'geometricPrecision');
 
-        const bg = document.createElementNS(NS, 'rect');
-        bg.setAttribute('x', '0'); bg.setAttribute('y', '0');
-        bg.setAttribute('width', vbSize); bg.setAttribute('height', vbSize);
-        bg.setAttribute('fill', colorLight);
-        svg.appendChild(bg);
+		  // Background
+		  const bg = document.createElementNS(NS, 'rect');
+		  bg.setAttribute('x', '0'); bg.setAttribute('y', '0');
+		  bg.setAttribute('width', vbSize); bg.setAttribute('height', vbSize);
+		  bg.setAttribute('fill', colorLight);
+		  svg.appendChild(bg);
 
-        const isDark = (r0, c0) => (r0 >= 0 && c0 >= 0 && r0 < n && c0 < n) ? qr.isDark(r0, c0) : false;
+		  const isDark = (rr, cc) => (rr >= 0 && cc >= 0 && rr < n && cc < n) ? qr.isDark(rr, cc) : false;
 
-        // Rounded-rect path segment (per-corner radii)
-        function roundedPath(x, y, w, h, rtl, rtr, rbr, rbl){
-          rtl = Math.min(rtl, w/2, h/2);
-          rtr = Math.min(rtr, w/2, h/2);
-          rbr = Math.min(rbr, w/2, h/2);
-          rbl = Math.min(rbl, w/2, h/2);
-          return [
-            `M${x+rtl},${y}`,
-            `H${x+w-rtr}`, rtr?`Q${x+w},${y} ${x+w},${y+rtr}`:`V${y}`,
-            `V${y+h-rbr}`, rbr?`Q${x+w},${y+h} ${x+w-rbr},${y+h}`:`H${x+w}`,
-            `H${x+rbl}`,   rbl?`Q${x},${y+h} ${x},${y+h-rbl}`:`V${y+h}`,
-            `V${y+rtl}`,   rtl?`Q${x},${y} ${x+rtl},${y}`:`H${x}`,
-            'Z'
-          ].join(' ');
-        }
+		  // Outer rounding for each dark module (one combined path)
+		  function roundedRectPath(x, y, w, h, rtl, rtr, rbr, rbl){
+			rtl = Math.min(rtl, w/2, h/2);
+			rtr = Math.min(rtr, w/2, h/2);
+			rbr = Math.min(rbr, w/2, h/2);
+			rbl = Math.min(rbl, w/2, h/2);
+			return [
+			  `M${x+rtl},${y}`,
+			  `H${x+w-rtr}`, rtr?`Q${x+w},${y} ${x+w},${y+rtr}`:`V${y}`,
+			  `V${y+h-rbr}`, rbr?`Q${x+w},${y+h} ${x+w-rbr},${y+h}`:`H${x+w}`,
+			  `H${x+rbl}`,   rbl?`Q${x},${y+h} ${x},${y+h-rbl}`:`V${y+h}`,
+			  `V${y+rtl}`,   rtl?`Q${x},${y} ${x+rtl},${y}`:`H${x}`,
+			  'Z'
+			].join(' ');
+		  }
 
-        // Build ONE combined path for all dark modules (outer rounding only)
-        let dDark = '';
-        for (let row = 0; row < n; row++) {
-          for (let col = 0; col < n; col++) {
-            if (!qr.isDark(row, col)) continue;
+		  let d = '';        // dark modules
+		  let holes = '';    // inner-corner cutouts (added to same path; evenodd fill)
 
-            const x = col * cell, y = row * cell;
-            const up = isDark(row-1, col), down = isDark(row+1, col);
-            const left = isDark(row, col-1), right = isDark(row, col+1);
+		  for (let row = 0; row < n; row++) {
+			for (let col = 0; col < n; col++) {
+			  const x = col * cell, y = row * cell;
 
-            const rtl = (!up && !left)  ? r : 0;
-            const rtr = (!up && !right) ? r : 0;
-            const rbr = (!down && !right)? r : 0;
-            const rbl = (!down && !left) ? r : 0;
+			  if (qr.isDark(row, col)) {
+				const up = isDark(row-1, col), down = isDark(row+1, col);
+				const left = isDark(row, col-1), right = isDark(row, col+1);
+				const rtl = (!up && !left)  ? r : 0;
+				const rtr = (!up && !right) ? r : 0;
+				const rbr = (!down && !right)? r : 0;
+				const rbl = (!down && !left) ? r : 0;
+				d += roundedRectPath(x, y, cell, cell, rtl, rtr, rbr, rbl) + ' ';
+			  } else if (r > 0) {
+				// Light cell: add quarter-circle *holes* where two orthogonal neighbors are dark
+				const up = isDark(row-1, col), down = isDark(row+1, col);
+				const left = isDark(row, col-1), right = isDark(row, col+1);
+				const xr = x + cell, yb = y + cell;
 
-            dDark += roundedPath(x, y, cell, cell, rtl, rtr, rbr, rbl) + ' ';
-          }
-        }
+				// TL hole (center at x,y)
+				if (up && left)   holes += `M${x},${y} L${x},${y+r} A${r},${r} 0 0 1 ${x+r},${y} Z `;
+				// TR hole (center at xr,y)
+				if (up && right)  holes += `M${xr},${y} L${xr-r},${y} A${r},${r} 0 0 1 ${xr},${y+r} Z `;
+				// BR hole (center at xr,yb)
+				if (down && right)holes += `M${xr},${yb} L${xr},${yb-r} A${r},${r} 0 0 1 ${xr-r},${yb} Z `;
+				// BL hole (center at x,yb)
+				if (down && left) holes += `M${x},${yb} L${x+r},${yb} A${r},${r} 0 0 1 ${x},${yb-r} Z `;
+			  }
+			}
+		  }
 
-        const darkPath = document.createElementNS(NS, 'path');
-        darkPath.setAttribute('d', dDark.trim());
-        darkPath.setAttribute('fill', colorDark);
-        svg.appendChild(darkPath);
+		  const path = document.createElementNS(NS, 'path');
+		  path.setAttribute('d', (d + holes).trim());
+		  path.setAttribute('fill', colorDark);
+		  path.setAttribute('fill-rule', 'evenodd'); // subtract holes
+		  svg.appendChild(path);
 
-        // --- NEW: inner-corner roundings (cutouts) -------------------------------
-        // For each LIGHT cell, if it has two orthogonal DARK neighbors, carve a quarter-circle
-        // out of the dark shape by overlaying a wedge filled with the background color.
-        let dCut = '';
-
-        function addTL(x,y){ // top-left corner of the light cell
-          dCut += `M${x},${y} L${x},${y+r} Q${x},${y} ${x+r},${y} L${x},${y} Z `;
-        }
-        function addTR(x,y, w){ // top-right corner (x+w,y)
-          const xr = x + w;
-          dCut += `M${xr},${y} L${xr - r},${y} Q${xr},${y} ${xr},${y + r} L${xr},${y} Z `;
-        }
-        function addBR(x,y, w,h){ // bottom-right (x+w,y+h)
-          const xr = x + w, yb = y + h;
-          dCut += `M${xr},${yb} L${xr},${yb - r} Q${xr},${yb} ${xr - r},${yb} L${xr},${yb} Z `;
-        }
-        function addBL(x,y, h){ // bottom-left (x,y+h)
-          const yb = y + h;
-          dCut += `M${x},${yb} L${x + r},${yb} Q${x},${yb} ${x},${yb - r} L${x},${yb} Z `;
-        }
-
-        for (let row = 0; row < n; row++) {
-          for (let col = 0; col < n; col++) {
-            if (isDark(row, col)) continue; // only consider light cells
-
-            const x = col * cell, y = row * cell;
-
-            if (isDark(row-1, col) && isDark(row, col-1)) addTL(x, y);
-            if (isDark(row-1, col) && isDark(row, col+1)) addTR(x, y, cell);
-            if (isDark(row+1, col) && isDark(row, col+1)) addBR(x, y, cell, cell);
-            if (isDark(row+1, col) && isDark(row, col-1)) addBL(x, y, cell);
-          }
-        }
-
-        if (dCut) {
-          const cut = document.createElementNS(NS, 'path');
-          cut.setAttribute('d', dCut.trim());
-          cut.setAttribute('fill', colorLight);       // same as background
-          svg.appendChild(cut);
-        }
-        // ------------------------------------------------------------------------
-
-        holder.appendChild(svg);
-        holder.style.padding = '8px';
-      }
+		  holder.appendChild(svg);
+		  holder.style.padding = '8px';
+		}
       
       // Events
       ['input','change','paste','blur','keyup'].forEach(ev =>
