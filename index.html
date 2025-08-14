@@ -119,54 +119,55 @@
         }
         return v;
       }
-
       function makeQR(){
-        const holder = $('#qrcode');
+        const holder = document.querySelector('#qrcode');
         if (typeof QRCode === 'undefined'){
           holder.innerHTML = '<div style="color:#b91c1c; font-size:14px;">QR library failed to load.</div>';
           return;
         }
 
-        const text = normalizeInput(inputEl.value);
-        const colorDark = colorDarkEl.value || '#000000';
-        const colorLight = colorLightEl.value || '#ffffff';
-        const roundedPct = Math.max(0, Math.min(50, parseInt(roundedEl.value || '25', 10)));
+        const text = normalizeInput(document.querySelector('#input').value);
+        const colorDark = document.querySelector('#colorDark').value || '#000000';
+        const colorLight = document.querySelector('#colorLight').value || '#ffffff';
+        const roundedPct = Math.max(0, Math.min(50, parseInt(document.querySelector('#rounded').value || '25', 10)));
 
-        if (!text) { clearQR(); lastText=''; lastColors={dark:'', light:''}; lastRounded=-1; return; }
-        if (text === lastText && colorDark === lastColors.dark &&
-            colorLight === lastColors.light && roundedPct === lastRounded) return;
+        if (!text) { holder.innerHTML = ''; lastText=''; lastColors={dark:'', light:''}; lastRounded=-1; return; }
+        if (text === lastText && colorDark === lastColors.dark && colorLight === lastColors.light && roundedPct === lastRounded) return;
 
-        lastText = text; lastColors = { dark: colorDark, light: colorLight }; lastRounded = roundedPct;
+        lastText = text; lastColors = {dark: colorDark, light: colorLight}; lastRounded = roundedPct;
         holder.innerHTML = '';
 
-        const size = Math.min(window.innerWidth * 0.8, 512);
-
-        // Build QR (encode only; we’ll custom-render)
-        const qr = new QRCode(document.createElement('div'), {
-          text, width: size, height: size,
-          colorDark, colorLight,
-          correctLevel: QRCode.CorrectLevel.M
-        })._oQRCode;
-
+        // Encode only
+        const tmp = new QRCode(document.createElement('div'), {
+          text, width: 256, height: 256, colorDark, colorLight, correctLevel: QRCode.CorrectLevel.M
+        });
+        const qr = tmp._oQRCode;
         const n = qr.getModuleCount();
-        const cell = size / n;
-        const r = cell * (roundedPct / 100);
 
+        // Choose an integer cell size to avoid fractional coords
+        const maxSize = Math.min(window.innerWidth * 0.8, 512);
+        const cell = Math.max(1, Math.floor(maxSize / n));      // integer px in viewBox units
+        const vbSize = cell * n;                                 // viewBox is exact multiple
+        const r = cell * (roundedPct / 100);                     // corner radius in viewBox units
+
+        // SVG setup
         const NS = "http://www.w3.org/2000/svg";
         const svg = document.createElementNS(NS, 'svg');
-        svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+        svg.setAttribute('viewBox', `0 0 ${vbSize} ${vbSize}`);
         svg.setAttribute('width', '100%');
         svg.setAttribute('height', '100%');
+        svg.setAttribute('shape-rendering', 'geometricPrecision'); // helps in some renderers
 
-        // Background (quiet zone)
+        // Background
         const bg = document.createElementNS(NS, 'rect');
         bg.setAttribute('x', '0'); bg.setAttribute('y', '0');
-        bg.setAttribute('width', size); bg.setAttribute('height', size);
+        bg.setAttribute('width', vbSize); bg.setAttribute('height', vbSize);
         bg.setAttribute('fill', colorLight);
         svg.appendChild(bg);
 
         const isDark = (r0, c0) => (r0 >= 0 && c0 >= 0 && r0 < n && c0 < n) ? qr.isDark(r0, c0) : false;
 
+        // Helper: path for one rounded-rect, given per-corner radii
         function roundedPath(x, y, w, h, rtl, rtr, rbr, rbl){
           rtl = Math.min(rtl, w/2, h/2);
           rtr = Math.min(rtr, w/2, h/2);
@@ -182,6 +183,8 @@
           ].join(' ');
         }
 
+        // Build ONE combined path so there are no seams
+        let d = '';
         for (let row = 0; row < n; row++) {
           for (let col = 0; col < n; col++) {
             if (!qr.isDark(row, col)) continue;
@@ -194,22 +197,26 @@
             const left = isDark(row, col-1);
             const right = isDark(row, col+1);
 
-            const roundTL = (!up && !left)  ? r : 0;
-            const roundTR = (!up && !right) ? r : 0;
-            const roundBR = (!down && !right)? r : 0;
-            const roundBL = (!down && !left) ? r : 0;
+            // Round only exposed outer corners
+            const rtl = (!up && !left)  ? r : 0;
+            const rtr = (!up && !right) ? r : 0;
+            const rbr = (!down && !right)? r : 0;
+            const rbl = (!down && !left) ? r : 0;
 
-            const path = document.createElementNS(NS, 'path');
-            path.setAttribute('d', roundedPath(x, y, cell, cell, roundTL, roundTR, roundBR, roundBL));
-            path.setAttribute('fill', colorDark);
-            svg.appendChild(path);
+            d += roundedPath(x, y, cell, cell, rtl, rtr, rbr, rbl) + ' ';
           }
         }
+
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', d.trim());
+        path.setAttribute('fill', colorDark);
+        path.setAttribute('fill-rule', 'nonzero'); // default; explicit just in case
+        svg.appendChild(path);
 
         holder.appendChild(svg);
         holder.style.padding = '8px';
       }
-
+      
       // Events
       ['input','change','paste','blur','keyup'].forEach(ev =>
         inputEl.addEventListener(ev, () => { lastText = ''; makeQR(); })
