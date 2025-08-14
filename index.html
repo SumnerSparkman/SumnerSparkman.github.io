@@ -144,13 +144,12 @@
 		  })._oQRCode;
 		  const n = qr.getModuleCount();
 
-		  // Snap to integer units (prevents hairlines)
+		  // integer grid to avoid hairlines
 		  const maxSize = Math.min(window.innerWidth * 0.8, 512);
 		  const cell = Math.max(1, Math.floor(maxSize / n));
 		  const vbSize = cell * n;
 		  const r = cell * (roundedPct / 100);
 
-		  // SVG
 		  const NS = "http://www.w3.org/2000/svg";
 		  const svg = document.createElementNS(NS, 'svg');
 		  svg.setAttribute('viewBox', `0 0 ${vbSize} ${vbSize}`);
@@ -158,7 +157,6 @@
 		  svg.setAttribute('height', '100%');
 		  svg.setAttribute('shape-rendering', 'geometricPrecision');
 
-		  // Background
 		  const bg = document.createElementNS(NS, 'rect');
 		  bg.setAttribute('x', '0'); bg.setAttribute('y', '0');
 		  bg.setAttribute('width', vbSize); bg.setAttribute('height', vbSize);
@@ -167,7 +165,6 @@
 
 		  const isDark = (rr, cc) => (rr >= 0 && cc >= 0 && rr < n && cc < n) ? qr.isDark(rr, cc) : false;
 
-		  // Outer rounding for each dark module (one combined path)
 		  function roundedRectPath(x, y, w, h, rtl, rtr, rbr, rbl){
 			rtl = Math.min(rtl, w/2, h/2);
 			rtr = Math.min(rtr, w/2, h/2);
@@ -183,8 +180,8 @@
 			].join(' ');
 		  }
 
-		  let d = '';        // dark modules
-		  let holes = '';    // inner-corner cutouts (added to same path; evenodd fill)
+		  let d = '';      // dark union
+		  let holes = '';  // concave cutouts (added with evenodd)
 
 		  for (let row = 0; row < n; row++) {
 			for (let col = 0; col < n; col++) {
@@ -193,24 +190,28 @@
 			  if (qr.isDark(row, col)) {
 				const up = isDark(row-1, col), down = isDark(row+1, col);
 				const left = isDark(row, col-1), right = isDark(row, col+1);
-				const rtl = (!up && !left)  ? r : 0;
-				const rtr = (!up && !right) ? r : 0;
-				const rbr = (!down && !right)? r : 0;
-				const rbl = (!down && !left) ? r : 0;
+
+				// NEW: require diagonal to be light for convex rounding
+				const tlDiag = isDark(row-1, col-1);
+				const trDiag = isDark(row-1, col+1);
+				const brDiag = isDark(row+1, col+1);
+				const blDiag = isDark(row+1, col-1);
+
+				const rtl = (!up && !left && !tlDiag) ? r : 0;
+				const rtr = (!up && !right && !trDiag) ? r : 0;
+				const rbr = (!down && !right && !brDiag) ? r : 0;
+				const rbl = (!down && !left && !blDiag) ? r : 0;
+
 				d += roundedRectPath(x, y, cell, cell, rtl, rtr, rbr, rbl) + ' ';
 			  } else if (r > 0) {
-				// Light cell: add quarter-circle *holes* where two orthogonal neighbors are dark
+				// inner (concave) corners: carve holes only where two orthogonal neighbors are dark
 				const up = isDark(row-1, col), down = isDark(row+1, col);
 				const left = isDark(row, col-1), right = isDark(row, col+1);
 				const xr = x + cell, yb = y + cell;
 
-				// TL hole (center at x,y)
 				if (up && left)   holes += `M${x},${y} L${x},${y+r} A${r},${r} 0 0 1 ${x+r},${y} Z `;
-				// TR hole (center at xr,y)
 				if (up && right)  holes += `M${xr},${y} L${xr-r},${y} A${r},${r} 0 0 1 ${xr},${y+r} Z `;
-				// BR hole (center at xr,yb)
 				if (down && right)holes += `M${xr},${yb} L${xr},${yb-r} A${r},${r} 0 0 1 ${xr-r},${yb} Z `;
-				// BL hole (center at x,yb)
 				if (down && left) holes += `M${x},${yb} L${x+r},${yb} A${r},${r} 0 0 1 ${x},${yb-r} Z `;
 			  }
 			}
@@ -225,6 +226,7 @@
 		  holder.appendChild(svg);
 		  holder.style.padding = '8px';
 		}
+
       
       // Events
       ['input','change','paste','blur','keyup'].forEach(ev =>
