@@ -6,51 +6,27 @@
   <title>QR Code Generator</title>
   <meta name="description" content="Enter any URL or text to instantly generate a QR code in your browser. No server required." />
   <style>
-    :root { --gap: 14px; }
-    * { box-sizing: border-box; }
-    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: #f9fafb; color: #111827; }
+    html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background: #f9fafb; color: #111827; }
     .wrap { min-height: 100%; display: grid; place-items: center; padding: 24px; }
-    .card { width: min(92vw, 760px); background: white; border: 1px solid #e5e7eb; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); padding: 22px; }
+    .card { width: min(92vw, 600px); background: white; border: 1px solid #e5e7eb; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.06); padding: 22px; }
     h1 { margin: 0 0 8px; font-size: clamp(1.25rem, 0.8rem + 2vw, 1.75rem); }
     p.sub { margin: 0 0 20px; color: #4b5563; }
-    form { display: grid; gap: var(--gap); margin-bottom: 14px; }
-    .row { display: grid; gap: var(--gap); grid-template-columns: 1fr; }
-    @media (min-width: 720px){ .row { grid-template-columns: 1fr auto; align-items: end; } }
-    label { font-weight: 600; font-size: 0.95rem; }
-    input[type="text"], select { width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 12px; font-size: 1rem; }
-    .controls { display: grid; gap: var(--gap); grid-template-columns: repeat(3, minmax(0,1fr)); }
-    .controls > div { display: grid; gap: 8px; }
-    button { cursor: pointer; padding: 12px 16px; border-radius: 12px; border: 1px solid #111827; background: #111827; color: white; font-weight: 600; }
-    button.secondary { background: white; color: #111827; border-color: #d1d5db; }
-    .qr-wrap { display: grid; place-items: center; padding: 18px; border: 1px dashed #e5e7eb; border-radius: 16px; margin-top: 10px; }
+    input[type="text"] { width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 12px; font-size: 1rem; }
+    .qr-wrap { display: grid; place-items: center; padding: 18px; border: 1px dashed #e5e7eb; border-radius: 16px; margin-top: 20px; }
     #qrcode { width: 100%; display: grid; place-items: center; }
     .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
-    .hint { font-size: 12px; color: #6b7280; margin-top: 8px; }
+    button { cursor: pointer; padding: 12px 16px; border-radius: 12px; border: 1px solid #111827; background: #111827; color: white; font-weight: 600; }
+    button.secondary { background: white; color: #111827; border-color: #d1d5db; }
   </style>
-
-  <!-- QRCode library (CDN) -->
   <script src="./qrcode.min.js"></script>
-  <!-- Optional: uncomment this and vendor the file locally to avoid CDN:
-  <script src="./qrcode.min.js"></script>
-  -->
 </head>
 <body>
   <main class="wrap">
     <section class="card">
       <h1>QR Code Generator</h1>
-      <p class="sub">Enter a URL (or any text) and get a downloadable QR code instantly. All in your browser.</p>
+      <p class="sub">Enter a URL or any text and get a downloadable QR code instantly.</p>
 
-      <form id="qrForm" novalidate>
-        <div>
-          <label for="input">URL or text</label>
-          <div class="row">
-            <input id="input" name="input" type="text" inputmode="url" placeholder="example.com or https://example.com" />
-            <button id="makeBtn" type="submit">Generate</button>
-          </div>
-        </div>
-
-        
-      </form>
+      <input id="input" name="input" type="text" placeholder="example.com or https://example.com" />
 
       <div class="qr-wrap">
         <div id="qrcode" aria-label="QR code output" role="img"></div>
@@ -62,45 +38,26 @@
         <button id="share" class="secondary" type="button">Share</button>
         <button id="permalink" class="secondary" type="button">Copy page permalink</button>
       </div>
-      <div class="hint">Tip: Use a permalink like <code>?u=https://example.com&s=512&e=M&m=4</code>.</div>
     </section>
   </main>
 
   <script>
     const $ = (sel) => document.querySelector(sel);
-    const params = new URLSearchParams(location.search);
-
     const inputEl = $('#input');
-    const sizeEl = $('#size');
-    const ecEl = $('#ec');
-    const marginEl = $('#margin');
     const dlBtn = $('#download');
     const copyBtn = $('#copyurl');
     const shareBtn = $('#share');
     const linkBtn = $('#permalink');
-    const form = $('#qrForm');
-
-    const EC = { L: QRCode?.CorrectLevel?.L, M: QRCode?.CorrectLevel?.M, Q: QRCode?.CorrectLevel?.Q, H: QRCode?.CorrectLevel?.H };
-
-    // Prefill from query string
-    if (params.has('u')) inputEl.value = params.get('u');
-    if (params.has('s')) sizeEl.value = clamp(parseInt(params.get('s'), 10), 128, 2048);
-    if (params.has('e') && ['L','M','Q','H'].includes(params.get('e'))) ecEl.value = params.get('e');
-    if (params.has('m')) marginEl.value = clamp(parseInt(params.get('m'), 10), 0, 8);
-
     let lastText = '';
 
     function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
     function clearQR(){ $('#qrcode').innerHTML = ''; }
-
     function normalizeInput(raw){
       let v = raw.trim();
       if (!v) return '';
-      // Treat strings with spaces as plain text (no normalization)
       const looksLikeUrl = /^[^\s]+\.[^\s]+/.test(v) || /^localhost(:\d+)?(\/|$)/i.test(v);
       const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(v);
       if (looksLikeUrl && !hasScheme){
-        // Assume https, and add www. if there is no subdomain already
         const parts = v.split('/');
         const host = parts[0];
         const hasSub = host.split('.').length > 2 || host.toLowerCase().startsWith('www.');
@@ -109,43 +66,28 @@
       }
       return v;
     }
-
     function makeQR(){
       if (typeof QRCode === 'undefined') {
-        alert('QR library failed to load. If you are offline or your network blocks CDNs, vendor qrcode.min.js locally and use the local <script> tag.');
+        alert('QR library failed to load.');
         return;
       }
       const text = normalizeInput(inputEl.value);
       if (!text) { clearQR(); lastText = ''; return; }
       if (text === lastText) return;
       lastText = text;
-
-      const size = clamp(parseInt(sizeEl.value, 10) || 512, 128, 2048);
-      const level = EC[ecEl.value] || QRCode.CorrectLevel.M;
-      const margin = clamp(parseInt(marginEl.value, 10) || 4, 0, 8);
-
       clearQR();
       new QRCode($('#qrcode'), {
         text,
-        width: size,
-        height: size,
+        width: 512,
+        height: 512,
         colorDark: '#000000',
         colorLight: '#ffffff',
-        correctLevel: level
+        correctLevel: QRCode.CorrectLevel.M
       });
-      // Simulate quiet zone by padding the container
-      $('#qrcode').style.padding = Math.max(0, margin * 2) + 'px';
+      $('#qrcode').style.padding = '8px';
     }
-
-    // Generate on submit + live typing
-    form.addEventListener('submit', (e) => { e.preventDefault(); makeQR(); });
-    [inputEl, sizeEl, ecEl, marginEl].forEach(el => el.addEventListener('change', makeQR));
     inputEl.addEventListener('input', () => { lastText = ''; makeQR(); });
 
-    // Initial generation if prefilled
-    if (inputEl.value) { lastText = ''; makeQR(); }
-
-    // Download PNG (works whether library produced <canvas> or <img>)
     dlBtn.addEventListener('click', () => {
       const canv = document.querySelector('#qrcode canvas');
       const img = document.querySelector('#qrcode img');
@@ -157,8 +99,6 @@
       link.href = dataUrl;
       link.click();
     });
-
-    // Copy input text
     copyBtn.addEventListener('click', async () => {
       const v = normalizeInput(inputEl.value);
       if (!v) return alert('Nothing to copy.');
@@ -166,21 +106,10 @@
       copyBtn.textContent = 'Copied!';
       setTimeout(() => copyBtn.textContent = 'Copy input text', 1200);
     });
-
-    // Share
-    function makeQuery(){
-      const q = new URLSearchParams();
-      const v = normalizeInput(inputEl.value);
-      if (v) q.set('u', v);
-      q.set('s', clamp(parseInt(sizeEl.value, 10) || 512, 128, 2048));
-      q.set('e', ecEl.value);
-      q.set('m', clamp(parseInt(marginEl.value, 10) || 4, 0, 8));
-      return q.toString();
-    }
     shareBtn.addEventListener('click', async () => {
       try {
         const url = new URL(location.href);
-        url.search = makeQuery();
+        url.search = '?u=' + encodeURIComponent(normalizeInput(inputEl.value));
         if (navigator.share) {
           await navigator.share({ title: 'QR Code', url: url.toString() });
         } else {
@@ -189,11 +118,9 @@
         }
       } catch { alert('Unable to share.'); }
     });
-
-    // Permalink
     linkBtn.addEventListener('click', async () => {
       const url = new URL(location.href);
-      url.search = makeQuery();
+      url.search = '?u=' + encodeURIComponent(normalizeInput(inputEl.value));
       await navigator.clipboard.writeText(url.toString());
       linkBtn.textContent = 'Permalink copied!';
       setTimeout(() => linkBtn.textContent = 'Copy page permalink', 1200);
