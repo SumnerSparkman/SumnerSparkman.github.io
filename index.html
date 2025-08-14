@@ -7,15 +7,18 @@
   <style>
     html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background: #f9fafb; color: #111827; }
     .wrap { min-height: 100%; display: grid; place-items: center; padding: 24px; }
-    .card { width: min(92vw, 600px); background: white; border: 1px solid #e5e7eb; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.06); padding: 22px; }
+    .card { width: min(92vw, 700px); background: white; border: 1px solid #e5e7eb; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.06); padding: 22px; }
     h1 { margin: 0 0 8px; font-size: clamp(1.25rem, 0.8rem + 2vw, 1.75rem); }
     p.sub { margin: 0 0 16px; color: #4b5563; }
     .row { display: grid; gap: 10px; grid-template-columns: 1fr; }
-    @media (min-width: 560px) { .row.two { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 640px) { .row.two { grid-template-columns: 1fr 1fr; } .row.three { grid-template-columns: 1fr 1fr 1fr; } }
     input[type="text"] { width: 100%; padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 12px; font-size: 1rem; }
-    .color-field { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 12px; }
-    .color-field label { font-size: .9rem; color: #374151; white-space: nowrap; }
-    .color-field input[type="color"] { width: 44px; height: 36px; border: none; padding: 0; background: none; }
+    .field { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 12px; }
+    .field label { font-size: .9rem; color: #374151; white-space: nowrap; }
+    .field input[type="color"] { width: 44px; height: 36px; border: none; padding: 0; background: none; }
+    .field.range { gap: 14px; }
+    .field output { min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
+    input[type="range"] { width: 100%; }
     .qr-wrap { display: grid; place-items: center; padding: 18px; border: 1px dashed #e5e7eb; border-radius: 16px; margin-top: 16px; }
     #qrcode { display: grid; place-items: center; width: 100%; }
     .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
@@ -28,20 +31,25 @@
   <main class="wrap">
     <section class="card">
       <h1>QR Code Generator</h1>
-      <p class="sub">Enter QR code data.</p>
+      <p class="sub">Enter text/URL, pick colors, and adjust rounded corners.</p>
 
       <div class="row">
         <input id="input" name="input" type="text" placeholder="example.com or https://example.com" />
       </div>
 
-      <div class="row two" style="margin-top:10px">
-        <div class="color-field">
+      <div class="row three" style="margin-top:10px">
+        <div class="field">
           <label for="colorDark">QR color</label>
           <input id="colorDark" type="color" value="#000000" />
         </div>
-        <div class="color-field">
+        <div class="field">
           <label for="colorLight">Background</label>
           <input id="colorLight" type="color" value="#ffffff" />
+        </div>
+        <div class="field range">
+          <label for="rounded">Roundedness</label>
+          <input id="rounded" type="range" min="0" max="50" step="1" value="25" />
+          <output id="roundedOut">25%</output>
         </div>
       </div>
 
@@ -64,21 +72,28 @@
       const inputEl = $('#input');
       const colorDarkEl = $('#colorDark');
       const colorLightEl = $('#colorLight');
+      const roundedEl = $('#rounded');
+      const roundedOut = $('#roundedOut');
       const dlBtn = $('#download');
       const copyBtn = $('#copyurl');
       const shareBtn = $('#share');
       const linkBtn = $('#permalink');
+
       let lastText = '';
       let lastColors = { dark: '', light: '' };
+      let lastRounded = -1;
 
-      // read query params on load
+      // Read query params on load (u, cd, cl, rs)
       const params = new URL(location.href).searchParams;
       const qUrl = params.get('u');
       const qCd = params.get('cd');
       const qCl = params.get('cl');
+      const qRs = params.get('rs'); // 0..50
       if (qUrl) inputEl.value = decodeURIComponent(qUrl);
       if (qCd) colorDarkEl.value = qCd;
       if (qCl) colorLightEl.value = qCl;
+      if (qRs && !Number.isNaN(parseInt(qRs))) roundedEl.value = String(Math.max(0, Math.min(50, parseInt(qRs, 10))));
+      roundedOut.textContent = roundedEl.value + '%';
 
       function clearQR(){ $('#qrcode').innerHTML = ''; }
 
@@ -97,6 +112,22 @@
         return v;
       }
 
+      function drawRoundedRect(ctx, x, y, w, h, r){
+        const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.lineTo(x + w - rr, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+        ctx.lineTo(x + w, y + h - rr);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+        ctx.lineTo(x + rr, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+        ctx.lineTo(x, y + rr);
+        ctx.quadraticCurveTo(x, y, x + rr, y);
+        ctx.closePath();
+        ctx.fill();
+      }
+
       function makeQR(){
         const holder = $('#qrcode');
         if (typeof QRCode === 'undefined'){
@@ -106,44 +137,81 @@
         const text = normalizeInput(inputEl.value);
         const colorDark = colorDarkEl.value || '#000000';
         const colorLight = colorLightEl.value || '#ffffff';
+        const roundedPct = Math.max(0, Math.min(50, parseInt(roundedEl.value || '25', 10)));
 
-        if (!text) { clearQR(); lastText = ''; lastColors = {dark:'', light:''}; return; }
-        // skip rerender if nothing changed
-        if (text === lastText && colorDark === lastColors.dark && colorLight === lastColors.light) return;
+        if (!text) { clearQR(); lastText = ''; lastColors = {dark:'', light:''}; lastRounded = -1; return; }
+        if (text === lastText &&
+            colorDark === lastColors.dark &&
+            colorLight === lastColors.light &&
+            roundedPct === lastRounded) return;
 
         lastText = text;
         lastColors = { dark: colorDark, light: colorLight };
+        lastRounded = roundedPct;
         clearQR();
 
-        // mobile-friendly size
         const size = Math.min(window.innerWidth * 0.8, 512);
-        new QRCode(holder, {
+
+        // Build QR (no default draw)
+        const qr = new QRCode(document.createElement('div'), {
           text,
           width: size,
           height: size,
           colorDark,
           colorLight,
           correctLevel: QRCode.CorrectLevel.M
-        });
+        })._oQRCode;
+
+        // Custom canvas render with rounded squares
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        const count = qr.getModuleCount();
+        const cell = size / count;
+        const radius = cell * (roundedPct / 100); // 0..50% of cell size
+
+        // background
+        ctx.fillStyle = colorLight;
+        ctx.fillRect(0, 0, size, size);
+
+        // modules
+        ctx.fillStyle = colorDark;
+        for (let r = 0; r < count; r++) {
+          for (let c = 0; c < count; c++) {
+            if (qr.isDark(r, c)) {
+              const x = c * cell;
+              const y = r * cell;
+              drawRoundedRect(ctx, x, y, cell, cell, radius);
+            }
+          }
+        }
+
+        holder.appendChild(canvas);
         holder.style.padding = '8px';
       }
 
-      // Render on input / color changes
+      // Events
       ['input','change','paste','blur','keyup'].forEach(ev =>
         inputEl.addEventListener(ev, () => { lastText = ''; makeQR(); })
       );
       [colorDarkEl, colorLightEl].forEach(el =>
         el.addEventListener('input', () => { lastText = ''; makeQR(); })
       );
+      roundedEl.addEventListener('input', () => {
+        roundedOut.textContent = roundedEl.value + '%';
+        lastText = '';
+        makeQR();
+      });
 
       makeQR();
 
+      // Download still works (we render a <canvas>)
       dlBtn.addEventListener('click', () => {
         const canv = document.querySelector('#qrcode canvas');
-        const img = document.querySelector('#qrcode img');
-        if (!canv && !img) return alert('Generate a QR first.');
-        const dataUrl = canv ? canv.toDataURL('image/png') : (img && img.src ? img.src : '');
-        if (!dataUrl.startsWith('data:image')) return alert('Unable to get image data.');
+        if (!canv) return alert('Generate a QR first.');
+        const dataUrl = canv.toDataURL('image/png');
         const link = document.createElement('a');
         link.download = 'qr.png';
         link.href = dataUrl;
@@ -163,10 +231,12 @@
         const v = normalizeInput(inputEl.value);
         const cd = colorDarkEl.value || '#000000';
         const cl = colorLightEl.value || '#ffffff';
+        const rs = Math.max(0, Math.min(50, parseInt(roundedEl.value || '25', 10)));
         const params = [];
         if (v) params.push('u=' + encodeURIComponent(v));
         if (cd) params.push('cd=' + encodeURIComponent(cd));
         if (cl) params.push('cl=' + encodeURIComponent(cl));
+        params.push('rs=' + rs);
         url.search = params.length ? ('?' + params.join('&')) : '';
         return url.toString();
       }
@@ -189,7 +259,6 @@
         setTimeout(() => linkBtn.textContent = 'Copy page permalink', 1200);
       });
 
-      // Regenerate on resize for crispness
       window.addEventListener('resize', () => { lastText = ''; makeQR(); });
     })();
   </script>
