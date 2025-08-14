@@ -144,21 +144,19 @@
         const qr = tmp._oQRCode;
         const n = qr.getModuleCount();
 
-        // Choose an integer cell size to avoid fractional coords
+        // Snap to integer grid to avoid hairlines
         const maxSize = Math.min(window.innerWidth * 0.8, 512);
-        const cell = Math.max(1, Math.floor(maxSize / n));      // integer px in viewBox units
-        const vbSize = cell * n;                                 // viewBox is exact multiple
-        const r = cell * (roundedPct / 100);                     // corner radius in viewBox units
+        const cell = Math.max(1, Math.floor(maxSize / n));
+        const vbSize = cell * n;
+        const r = cell * (roundedPct / 100);
 
-        // SVG setup
         const NS = "http://www.w3.org/2000/svg";
         const svg = document.createElementNS(NS, 'svg');
         svg.setAttribute('viewBox', `0 0 ${vbSize} ${vbSize}`);
         svg.setAttribute('width', '100%');
         svg.setAttribute('height', '100%');
-        svg.setAttribute('shape-rendering', 'geometricPrecision'); // helps in some renderers
+        svg.setAttribute('shape-rendering', 'geometricPrecision');
 
-        // Background
         const bg = document.createElementNS(NS, 'rect');
         bg.setAttribute('x', '0'); bg.setAttribute('y', '0');
         bg.setAttribute('width', vbSize); bg.setAttribute('height', vbSize);
@@ -167,7 +165,7 @@
 
         const isDark = (r0, c0) => (r0 >= 0 && c0 >= 0 && r0 < n && c0 < n) ? qr.isDark(r0, c0) : false;
 
-        // Helper: path for one rounded-rect, given per-corner radii
+        // Rounded-rect path segment (per-corner radii)
         function roundedPath(x, y, w, h, rtl, rtr, rbr, rbl){
           rtl = Math.min(rtl, w/2, h/2);
           rtr = Math.min(rtr, w/2, h/2);
@@ -183,35 +181,71 @@
           ].join(' ');
         }
 
-        // Build ONE combined path so there are no seams
-        let d = '';
+        // Build ONE combined path for all dark modules (outer rounding only)
+        let dDark = '';
         for (let row = 0; row < n; row++) {
           for (let col = 0; col < n; col++) {
             if (!qr.isDark(row, col)) continue;
 
-            const x = col * cell;
-            const y = row * cell;
+            const x = col * cell, y = row * cell;
+            const up = isDark(row-1, col), down = isDark(row+1, col);
+            const left = isDark(row, col-1), right = isDark(row, col+1);
 
-            const up = isDark(row-1, col);
-            const down = isDark(row+1, col);
-            const left = isDark(row, col-1);
-            const right = isDark(row, col+1);
-
-            // Round only exposed outer corners
             const rtl = (!up && !left)  ? r : 0;
             const rtr = (!up && !right) ? r : 0;
             const rbr = (!down && !right)? r : 0;
             const rbl = (!down && !left) ? r : 0;
 
-            d += roundedPath(x, y, cell, cell, rtl, rtr, rbr, rbl) + ' ';
+            dDark += roundedPath(x, y, cell, cell, rtl, rtr, rbr, rbl) + ' ';
           }
         }
 
-        const path = document.createElementNS(NS, 'path');
-        path.setAttribute('d', d.trim());
-        path.setAttribute('fill', colorDark);
-        path.setAttribute('fill-rule', 'nonzero'); // default; explicit just in case
-        svg.appendChild(path);
+        const darkPath = document.createElementNS(NS, 'path');
+        darkPath.setAttribute('d', dDark.trim());
+        darkPath.setAttribute('fill', colorDark);
+        svg.appendChild(darkPath);
+
+        // --- NEW: inner-corner roundings (cutouts) -------------------------------
+        // For each LIGHT cell, if it has two orthogonal DARK neighbors, carve a quarter-circle
+        // out of the dark shape by overlaying a wedge filled with the background color.
+        let dCut = '';
+
+        function addTL(x,y){ // top-left corner of the light cell
+          dCut += `M${x},${y} L${x},${y+r} Q${x},${y} ${x+r},${y} L${x},${y} Z `;
+        }
+        function addTR(x,y, w){ // top-right corner (x+w,y)
+          const xr = x + w;
+          dCut += `M${xr},${y} L${xr - r},${y} Q${xr},${y} ${xr},${y + r} L${xr},${y} Z `;
+        }
+        function addBR(x,y, w,h){ // bottom-right (x+w,y+h)
+          const xr = x + w, yb = y + h;
+          dCut += `M${xr},${yb} L${xr},${yb - r} Q${xr},${yb} ${xr - r},${yb} L${xr},${yb} Z `;
+        }
+        function addBL(x,y, h){ // bottom-left (x,y+h)
+          const yb = y + h;
+          dCut += `M${x},${yb} L${x + r},${yb} Q${x},${yb} ${x},${yb - r} L${x},${yb} Z `;
+        }
+
+        for (let row = 0; row < n; row++) {
+          for (let col = 0; col < n; col++) {
+            if (isDark(row, col)) continue; // only consider light cells
+
+            const x = col * cell, y = row * cell;
+
+            if (isDark(row-1, col) && isDark(row, col-1)) addTL(x, y);
+            if (isDark(row-1, col) && isDark(row, col+1)) addTR(x, y, cell);
+            if (isDark(row+1, col) && isDark(row, col+1)) addBR(x, y, cell, cell);
+            if (isDark(row+1, col) && isDark(row, col-1)) addBL(x, y, cell);
+          }
+        }
+
+        if (dCut) {
+          const cut = document.createElementNS(NS, 'path');
+          cut.setAttribute('d', dCut.trim());
+          cut.setAttribute('fill', colorLight);       // same as background
+          svg.appendChild(cut);
+        }
+        // ------------------------------------------------------------------------
 
         holder.appendChild(svg);
         holder.style.padding = '8px';
