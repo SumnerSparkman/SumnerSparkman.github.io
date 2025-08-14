@@ -134,25 +134,24 @@
           holder.innerHTML = '<div style="color:#b91c1c; font-size:14px;">QR library failed to load.</div>';
           return;
         }
+
         const text = normalizeInput(inputEl.value);
         const colorDark = colorDarkEl.value || '#000000';
         const colorLight = colorLightEl.value || '#ffffff';
         const roundedPct = Math.max(0, Math.min(50, parseInt(roundedEl.value || '25', 10)));
 
-        if (!text) { clearQR(); lastText = ''; lastColors = {dark:'', light:''}; lastRounded = -1; return; }
+        if (!text) { holder.innerHTML = ''; lastText=''; lastColors={dark:'',light:''}; lastRounded=-1; return; }
         if (text === lastText &&
             colorDark === lastColors.dark &&
             colorLight === lastColors.light &&
             roundedPct === lastRounded) return;
 
-        lastText = text;
-        lastColors = { dark: colorDark, light: colorLight };
-        lastRounded = roundedPct;
-        clearQR();
+        lastText = text; lastColors = {dark: colorDark, light: colorLight}; lastRounded = roundedPct;
+        holder.innerHTML = '';
 
         const size = Math.min(window.innerWidth * 0.8, 512);
 
-        // Build QR (no default draw)
+        // Build QR (encode only)
         const qr = new QRCode(document.createElement('div'), {
           text,
           width: size,
@@ -162,33 +161,74 @@
           correctLevel: QRCode.CorrectLevel.M
         })._oQRCode;
 
-        // Custom canvas render with rounded squares
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
+        const n = qr.getModuleCount();
+        const cell = size / n;
+        const r = cell * (roundedPct / 100); // desired radius
 
-        const count = qr.getModuleCount();
-        const cell = size / count;
-        const radius = cell * (roundedPct / 100); // 0..50% of cell size
+        // SVG helpers
+        const NS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
 
-        // background
-        ctx.fillStyle = colorLight;
-        ctx.fillRect(0, 0, size, size);
+        // background (quiet zone)
+        const bg = document.createElementNS(NS, 'rect');
+        bg.setAttribute('x', '0');
+        bg.setAttribute('y', '0');
+        bg.setAttribute('width', size);
+        bg.setAttribute('height', size);
+        bg.setAttribute('fill', colorLight);
+        svg.appendChild(bg);
 
-        // modules
-        ctx.fillStyle = colorDark;
-        for (let r = 0; r < count; r++) {
-          for (let c = 0; c < count; c++) {
-            if (qr.isDark(r, c)) {
-              const x = c * cell;
-              const y = r * cell;
-              drawRoundedRect(ctx, x, y, cell, cell, radius);
-            }
+        // utility: is module dark?
+        const dark = (r0, c0) => (r0 >= 0 && c0 >= 0 && r0 < n && c0 < n) ? qr.isDark(r0, c0) : false;
+
+        // returns path for a rect with optional rounding per corner
+        function roundedPath(x, y, w, h, rtl, rtr, rbr, rbl){
+          // clamp radii
+          rtl = Math.min(rtl, w/2, h/2);
+          rtr = Math.min(rtr, w/2, h/2);
+          rbr = Math.min(rbr, w/2, h/2);
+          rbl = Math.min(rbl, w/2, h/2);
+          return [
+            `M${x+rtl},${y}`,
+            `H${x+w-rtr}`, rtr?`Q${x+w},${y} ${x+w},${y+rtr}`:`V${y}`,
+            `V${y+h-rbr}`, rbr?`Q${x+w},${y+h} ${x+w-rbr},${y+h}`:`H${x+w}`,
+            `H${x+rbl}`,   rbl?`Q${x},${y+h} ${x},${y+h-rbl}`:`V${y+h}`,
+            `V${y+rtl}`,   rtl?`Q${x},${y} ${x+rtl},${y}`:`H${x}`,
+            'Z'
+          ].join(' ');
+        }
+
+        // For each dark module, round **only exposed outer corners**.
+        for (let row = 0; row < n; row++) {
+          for (let col = 0; col < n; col++) {
+            if (!qr.isDark(row, col)) continue;
+
+            const x = col * cell;
+            const y = row * cell;
+
+            // neighbors
+            const up    = dark(row-1, col);
+            const down  = dark(row+1, col);
+            const left  = dark(row, col-1);
+            const right = dark(row, col+1);
+
+            // Round a corner only if BOTH adjacent edges for that corner are exposed.
+            const roundTL = (!up && !left)  ? r : 0;
+            const roundTR = (!up && !right) ? r : 0;
+            const roundBR = (!down && !right)? r : 0;
+            const roundBL = (!down && !left) ? r : 0;
+
+            const path = document.createElementNS(NS, 'path');
+            path.setAttribute('d', roundedPath(x, y, cell, cell, roundTL, roundTR, roundBR, roundBL));
+            path.setAttribute('fill', colorDark);
+            svg.appendChild(path);
           }
         }
 
-        holder.appendChild(canvas);
+        holder.appendChild(svg);
         holder.style.padding = '8px';
       }
 
